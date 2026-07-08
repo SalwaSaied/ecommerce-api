@@ -6,8 +6,20 @@ const validate = require('../middleware/validate.middleware');
 const { protect, adminOnly } = require('../middleware/auth.middleware');
 const upload = require('../middleware/upload.middleware');
 
-const { addUserSchema, updateUserSchema, changePasswordSchema } = require('../validation/user.validation');
-
+const {
+  addUserSchema,
+  updateUserSchema,
+  changePasswordSchema,
+  changeRoleSchema,
+} = require('../validation/user.validation');
+// PATCH /users/:id/role — Admin only: change a user's role
+router.patch(
+  '/:id/role',
+  protect,
+  adminOnly,
+  validate(changeRoleSchema),
+  userController.changeUserRole
+);
 // POST /users/add — Admin only: add a new user from the admin panel
 router.post('/add', protect, adminOnly, validate(addUserSchema), userController.addUser);
 

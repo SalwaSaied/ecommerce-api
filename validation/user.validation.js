@@ -32,4 +32,11 @@ const changePasswordSchema = Joi.object({
   newPassword: Joi.string().min(8).required(),
 });
 
-module.exports = { addUserSchema, updateUserSchema, changePasswordSchema };
+// PATCH /users/:id/role (Admin) — dedicated endpoint for changing a
+// user's role. Kept separate from updateUser so a regular user can
+// never promote themselves to admin through the normal profile update.
+const changeRoleSchema = Joi.object({
+  role: Joi.string().valid('admin', 'customer').required(),
+});
+
+module.exports = { addUserSchema, updateUserSchema, changePasswordSchema, changeRoleSchema };

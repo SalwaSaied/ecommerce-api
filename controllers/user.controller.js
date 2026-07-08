@@ -179,7 +179,42 @@ const { username, phone, addresses } = req.body;
     },
   });
 });
+// ------------------------------------------------------------------
+// PATCH /users/:id/role   (Admin)
+// Dedicated endpoint for promoting/demoting a user's role. Kept
+// separate from updateUser so a regular user can never change their
+// own role through the normal profile-update flow.
+// ------------------------------------------------------------------
+exports.changeUserRole = catchAsync(async (req, res, next) => {
+  const { role } = req.body;
 
+  const user = await User.findById(req.params.id);
+  if (!user) {
+    return next(new AppError('User not found.', 404));
+  }
+
+  // Prevent an admin from accidentally demoting themselves, which
+  // could lock everyone out of admin-only endpoints.
+  if (user._id.toString() === req.user._id.toString() && role !== 'admin') {
+    return next(new AppError('You cannot change your own role.', 400));
+  }
+
+  user.role = role;
+  await user.save();
+
+  res.status(200).json({
+    success: true,
+    message: `User role updated to "${role}" successfully.`,
+    data: {
+      user: {
+        id: user._id,
+        username: user.username,
+        email: user.email,
+        role: user.role,
+      },
+    },
+  });
+});
 // ------------------------------------------------------------------
 // POST /users/change-password   (User)
 // Dedicated password-change endpoint — kept separate from updateUser
