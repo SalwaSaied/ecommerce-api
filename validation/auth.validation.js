@@ -22,13 +22,13 @@ const loginSchema = Joi.object({
   password: Joi.string().required(),
 });
 
-const forgotPasswordSendOtpSchema = Joi.object({
+const forgotPasswordSchema = Joi.object({
   email: Joi.string().email().required(),
 });
 
-const forgotPasswordVerifyOtpSchema = Joi.object({
-  email: Joi.string().email().required(),
-  otp: Joi.string().length(6).pattern(/^[0-9]+$/).required(),
+// Note: the reset token itself comes from the URL param (/:token),
+// not the body — so this schema only validates the new password.
+const resetPasswordSchema = Joi.object({
   newPassword: Joi.string().min(8).required(),
 });
 
@@ -36,6 +36,6 @@ module.exports = {
   registerSendOtpSchema,
   verifyOtpSchema,
   loginSchema,
-  forgotPasswordSendOtpSchema,
-  forgotPasswordVerifyOtpSchema,
+  forgotPasswordSchema,
+  resetPasswordSchema,
 };

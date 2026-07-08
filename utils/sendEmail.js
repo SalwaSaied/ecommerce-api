@@ -34,4 +34,21 @@ const otpEmailTemplate = (otp, purpose = 'verify your account') => `
   </div>
 `;
 
-module.exports = { sendEmail, otpEmailTemplate };
+// Ready-made template for the "forgot password" email — contains a
+// clickable link (not a code) with the raw reset token embedded in the URL.
+const resetPasswordEmailTemplate = (resetLink) => `
+  <div style="font-family: Arial, sans-serif; max-width: 480px; margin: auto;">
+    <h2>Reset Your Password</h2>
+    <p>We received a request to reset your password. Click the button below to choose a new one. This link expires in 10 minutes.</p>
+    <div style="text-align: center; margin: 24px 0;">
+      <a href="${resetLink}" style="background: #111; color: #fff; padding: 12px 24px; border-radius: 6px; text-decoration: none; display: inline-block;">
+        Reset Password
+      </a>
+    </div>
+    <p>If the button doesn't work, copy and paste this link into your browser:</p>
+    <p style="word-break: break-all; color: #555;">${resetLink}</p>
+    <p>If you did not request this, please ignore this email — your password will remain unchanged.</p>
+  </div>
+`;
+
+module.exports = { sendEmail, otpEmailTemplate, resetPasswordEmailTemplate };

@@ -4,7 +4,8 @@ const catchAsync = require('../utils/catchAsync');
 const AppError = require('../utils/AppError');
 const generateToken = require('../utils/generateToken');
 const generateOtp = require('../utils/generateOtp');
-const { sendEmail, otpEmailTemplate } = require('../utils/sendEmail');
+const { sendEmail, otpEmailTemplate, resetPasswordEmailTemplate } = require('../utils/sendEmail');
+const { generateResetToken, hashToken } = require('../utils/generateResetToken');
 
 const OTP_EXPIRY_MINUTES = 10;
 
@@ -127,20 +128,24 @@ exports.login = catchAsync(async (req, res, next) => {
 
 // ------------------------------------------------------------------
 // POST /auth/logout   (User)
-// Stateless JWT — logout simply clears the cookie if one is used.
+// This project uses a stateless JWT sent in the Authorization header
+// (not a cookie), so the server never holds a session to invalidate.
+// "Logging out" simply means the client discards the token it's holding.
 // ------------------------------------------------------------------
 exports.logout = catchAsync(async (req, res, next) => {
-  res.clearCookie('token');
   res.status(200).json({
     success: true,
-    message: 'Logged out successfully.',
+    message: 'Logged out successfully. Please discard your token on the client side.',
   });
 });
 
 // ------------------------------------------------------------------
-// POST /auth/forgotpassword/send-otp   (Public)
+// POST /auth/forgotpassword   (Public)
+// Generates a random reset token, stores only its HASH on the user
+// document (never the raw token), and emails the user a clickable link
+// containing the raw token: {CLIENT_URL}/reset-password/{resetToken}
 // ------------------------------------------------------------------
-exports.forgotPasswordSendOtp = catchAsync(async (req, res, next) => {
+exports.forgotPassword = catchAsync(async (req, res, next) => {
   const { email } = req.body;
 
   const user = await User.findOne({ email });
@@ -148,65 +153,64 @@ exports.forgotPasswordSendOtp = catchAsync(async (req, res, next) => {
     return next(new AppError('No account found with this email.', 404));
   }
 
-  await OTP.deleteMany({ email, purpose: 'reset-password' });
+  const { resetToken, hashedToken } = generateResetToken();
 
-  const otp = generateOtp();
-  await OTP.create({
-    email,
-    otp,
-    purpose: 'reset-password',
-    expiresAt: new Date(Date.now() + OTP_EXPIRY_MINUTES * 60 * 1000),
-  });
+  user.resetPasswordToken = hashedToken;
+  user.resetPasswordExpire = new Date(Date.now() + OTP_EXPIRY_MINUTES * 60 * 1000);
+  await user.save({ validateBeforeSave: false });
 
-  await sendEmail({
-    to: email,
-    subject: 'Reset your password — SEF Academy Store',
-    html: otpEmailTemplate(otp, 'reset your password'),
-  });
+  const clientUrl = process.env.CLIENT_URL || 'http://localhost:3000';
+  const resetLink = `${clientUrl}/reset-password/${resetToken}`;
+
+  try {
+    await sendEmail({
+      to: email,
+      subject: 'Reset your password — SEF Academy Store',
+      html: resetPasswordEmailTemplate(resetLink),
+    });
+  } catch (err) {
+    user.resetPasswordToken = undefined;
+    user.resetPasswordExpire = undefined;
+    await user.save({ validateBeforeSave: false });
+    return next(new AppError('Failed to send the reset email. Please try again.', 500));
+  }
 
   res.status(200).json({
     success: true,
-    message: `A password reset OTP has been sent to ${email}.`,
+    message: `A password reset link has been sent to ${email}. It expires in ${OTP_EXPIRY_MINUTES} minutes.`,
   });
 });
 
 // ------------------------------------------------------------------
-// POST /auth/forgotpassword/verify-otp   (Public)
-// Verifies the OTP and sets the new password in one step.
+// PATCH /auth/resetpassword/:token   (Public)
+// The token arrives in the URL (exactly what the emailed link contains).
+// We hash it and compare against the hash stored on the user document.
 // ------------------------------------------------------------------
-exports.forgotPasswordVerifyOtp = catchAsync(async (req, res, next) => {
-  const { email, otp, newPassword } = req.body;
+exports.resetPassword = catchAsync(async (req, res, next) => {
+  const { token } = req.params;
+  const { newPassword } = req.body;
 
-  const otpRecord = await OTP.findOne({ email, purpose: 'reset-password' }).sort({ createdAt: -1 });
-  if (!otpRecord) {
-    return next(new AppError('No password reset request found for this email.', 400));
-  }
+  const hashedToken = hashToken(token);
 
-  if (otpRecord.expiresAt < new Date()) {
-    await otpRecord.deleteOne();
-    return next(new AppError('OTP has expired. Please request a new one.', 400));
-  }
+  const user = await User.findOne({
+    resetPasswordToken: hashedToken,
+    resetPasswordExpire: { $gt: new Date() },
+  });
 
-  const isMatch = await otpRecord.compareOtp(otp);
-  if (!isMatch) {
-    return next(new AppError('Invalid OTP.', 400));
-  }
-
-  const user = await User.findOne({ email });
   if (!user) {
-    return next(new AppError('No account found with this email.', 404));
+    return next(new AppError('Invalid or expired reset link. Please request a new one.', 400));
   }
 
   user.password = newPassword; // pre-save hook will hash it
+  user.resetPasswordToken = undefined;
+  user.resetPasswordExpire = undefined;
   await user.save();
-  await otpRecord.deleteOne();
 
   res.status(200).json({
     success: true,
     message: 'Password has been reset successfully. Please log in.',
   });
 });
-
 // ------------------------------------------------------------------
 // GET /auth/me   (User)
 // ------------------------------------------------------------------

@@ -7,10 +7,8 @@ const cookieParser = require('cookie-parser');
 const connectDB = require('./DB/connection');
 const errorHandler = require('./middleware/error.middleware');
 const authRoutes = require('./routes/auth.routes');
-// NOTE: as the other modules (products, cart, orders, wishlist, admin) are
-// built during Weeks 3-4, mount their routers here the same way, e.g.:
-// const productRoutes = require('./routes/product.routes');
-// app.use('/products', productRoutes);
+const userRoutes = require('./routes/user.routes');
+
 
 const app = express();
 
@@ -27,6 +25,7 @@ connectDB();
 
 // Routes
 app.use('/auth', authRoutes);
+app.use('/users', userRoutes);
 
 // Health check
 app.get('/', (req, res) => {

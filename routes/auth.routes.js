@@ -9,24 +9,21 @@ const {
   registerSendOtpSchema,
   verifyOtpSchema,
   loginSchema,
-  forgotPasswordSendOtpSchema,
-  forgotPasswordVerifyOtpSchema,
+  forgotPasswordSchema,
+  resetPasswordSchema,
 } = require('../validation/auth.validation');
 
 // Public
 router.post('/register/send-otp', validate(registerSendOtpSchema), authController.registerSendOtp);
 router.post('/verify-otp', validate(verifyOtpSchema), authController.verifyOtp);
 router.post('/login', validate(loginSchema), authController.login);
-router.post(
-  '/forgotpassword/send-otp',
-  validate(forgotPasswordSendOtpSchema),
-  authController.forgotPasswordSendOtp
-);
-router.post(
-  '/forgotpassword/verify-otp',
-  validate(forgotPasswordVerifyOtpSchema),
-  authController.forgotPasswordVerifyOtp
-);
+
+// Sends a reset LINK (with a token embedded in the URL) via email
+router.post('/forgotpassword', validate(forgotPasswordSchema), authController.forgotPassword);
+
+// The token comes from the URL — this is the endpoint the emailed link's
+// frontend page would call after the user enters a new password
+router.patch('/resetpassword/:token', validate(resetPasswordSchema), authController.resetPassword);
 
 // Protected (requires valid JWT)
 router.post('/logout', protect, authController.logout);
