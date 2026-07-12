@@ -2,11 +2,10 @@ const User = require('../models/User.model');
 const catchAsync = require('../utils/catchAsync');
 const AppError = require('../utils/AppError');
 const { uploadToCloudinary, deleteFromCloudinary } = require('../utils/uploadToCloudinary');
+const MESSAGES = require('../constants/messages');
 
 // ------------------------------------------------------------------
 // POST /users/add   (Admin)
-// Admin creates a user directly — no OTP verification needed since
-// the admin is vouching for the account.
 // ------------------------------------------------------------------
 exports.addUser = catchAsync(async (req, res, next) => {
   const { username, email, password, phone, role } = req.body;
@@ -22,7 +21,7 @@ exports.addUser = catchAsync(async (req, res, next) => {
     password,
     phone,
     role: role || 'customer',
-    isVerified: true, // admin-created accounts are trusted immediately
+    isVerified: true,
   });
 
   res.status(201).json({
@@ -41,18 +40,12 @@ exports.addUser = catchAsync(async (req, res, next) => {
 
 // ------------------------------------------------------------------
 // GET /users/all   (Admin)
-// Supports pagination via ?page= & ?limit=, plus optional filters:
-//   ?role=admin | customer
-//   ?isVerified=true | false
-//   ?search=<text>   (matches username OR email, case-insensitive)
 // ------------------------------------------------------------------
 exports.getAllUsers = catchAsync(async (req, res, next) => {
   const page = Number(req.query.page) || 1;
   const limit = Number(req.query.limit) || 20;
   const skip = (page - 1) * limit;
 
-  // Build the filter object dynamically — only add a condition if the
-  // matching query param was actually provided.
   const filter = {};
 
   if (req.query.role) {
@@ -64,7 +57,7 @@ exports.getAllUsers = catchAsync(async (req, res, next) => {
   }
 
   if (req.query.search) {
-    const searchRegex = new RegExp(req.query.search, 'i'); // case-insensitive
+    const searchRegex = new RegExp(req.query.search, 'i');
     filter.$or = [{ username: searchRegex }, { email: searchRegex }];
   }
 
@@ -90,7 +83,7 @@ exports.getUserById = catchAsync(async (req, res, next) => {
   const user = await User.findById(req.params.id);
 
   if (!user) {
-    return next(new AppError('User not found.', 404));
+    return next(new AppError(MESSAGES.USER_NOT_FOUND, 404));
   }
 
   res.status(200).json({
@@ -101,9 +94,6 @@ exports.getUserById = catchAsync(async (req, res, next) => {
 
 // ------------------------------------------------------------------
 // PATCH /users/:id   (User)
-// A logged-in user can update their own profile (username, phone,
-// avatar). An admin may update anyone's. Anyone else is forbidden.
-// Accepts multipart/form-data with an optional "avatar" image field.
 // ------------------------------------------------------------------
 exports.updateUser = catchAsync(async (req, res, next) => {
   const targetId = req.params.id;
@@ -116,14 +106,11 @@ exports.updateUser = catchAsync(async (req, res, next) => {
 
   const user = await User.findById(targetId);
   if (!user) {
-    return next(new AppError('User not found.', 404));
+    return next(new AppError(MESSAGES.USER_NOT_FOUND, 404));
   }
 
-const { username, phone, addresses } = req.body;
+  const { username, phone, addresses } = req.body;
 
-  // Since avatar (a file) doesn't go through Joi's body validation, we
-  // check here that the request has SOMETHING to update: a text field
-  // or a file.
   if (username === undefined && phone === undefined && addresses === undefined && !req.file) {
     return next(new AppError('Please provide at least one field to update.', 400));
   }
@@ -131,8 +118,6 @@ const { username, phone, addresses } = req.body;
   if (username !== undefined) user.username = username;
   if (phone !== undefined) user.phone = phone;
 
-  // addresses arrives as a JSON string (multipart/form-data field),
-    // so we parse it here and validate its shape before saving.
   if (addresses !== undefined) {
     let parsedAddresses;
     try {
@@ -145,20 +130,20 @@ const { username, phone, addresses } = req.body;
       return next(new AppError('addresses must be an array.', 400));
     }
 
-    // Replace the full addresses list with the one provided
     user.addresses = parsedAddresses;
   }
 
-  // Optional avatar upload (multipart/form-data, field name "avatar")
+  // Upload the NEW image first, delete the OLD one only after that
+  // succeeds — avoids leaving the user with no avatar if the upload fails.
   if (req.file) {
-    // Delete the old avatar from Cloudinary first (skip the default placeholder,
-    // which has no publicId and isn't something we uploaded ourselves)
-    if (user.avatar && user.avatar.publicId) {
-      await deleteFromCloudinary(user.avatar.publicId);
-    }
-
     const uploaded = await uploadToCloudinary(req.file.buffer, 'ecommerce/avatars');
+    const oldAvatarPublicId = user.avatar && user.avatar.publicId;
+
     user.avatar = { url: uploaded.url, publicId: uploaded.public_id };
+
+    if (oldAvatarPublicId) {
+      await deleteFromCloudinary(oldAvatarPublicId);
+    }
   }
 
   await user.save();
@@ -179,53 +164,13 @@ const { username, phone, addresses } = req.body;
     },
   });
 });
-// ------------------------------------------------------------------
-// PATCH /users/:id/role   (Admin)
-// Dedicated endpoint for promoting/demoting a user's role. Kept
-// separate from updateUser so a regular user can never change their
-// own role through the normal profile-update flow.
-// ------------------------------------------------------------------
-exports.changeUserRole = catchAsync(async (req, res, next) => {
-  const { role } = req.body;
 
-  const user = await User.findById(req.params.id);
-  if (!user) {
-    return next(new AppError('User not found.', 404));
-  }
-
-  // Prevent an admin from accidentally demoting themselves, which
-  // could lock everyone out of admin-only endpoints.
-  if (user._id.toString() === req.user._id.toString() && role !== 'admin') {
-    return next(new AppError('You cannot change your own role.', 400));
-  }
-
-  user.role = role;
-  await user.save();
-
-  res.status(200).json({
-    success: true,
-    message: `User role updated to "${role}" successfully.`,
-    data: {
-      user: {
-        id: user._id,
-        username: user.username,
-        email: user.email,
-        role: user.role,
-      },
-    },
-  });
-});
 // ------------------------------------------------------------------
 // POST /users/change-password   (User)
-// Dedicated password-change endpoint — kept separate from updateUser
-// on purpose. Requires the current password before setting a new one,
-// so a valid token alone isn't enough to take over the account.
 // ------------------------------------------------------------------
 exports.changePassword = catchAsync(async (req, res, next) => {
   const { currentPassword, newPassword } = req.body;
 
-  // Need the password field explicitly since the User schema hides it
-  // (select: false) by default.
   const user = await User.findById(req.user._id).select('+password');
 
   const isMatch = await user.comparePassword(currentPassword);
@@ -233,7 +178,12 @@ exports.changePassword = catchAsync(async (req, res, next) => {
     return next(new AppError('Current password is incorrect.', 401));
   }
 
-  user.password = newPassword; // pre-save hook will hash it
+  const isSamePassword = await user.comparePassword(newPassword);
+  if (isSamePassword) {
+    return next(new AppError('New password must be different from the current password.', 400));
+  }
+
+  user.password = newPassword;
   await user.save();
 
   res.status(200).json({
@@ -241,6 +191,7 @@ exports.changePassword = catchAsync(async (req, res, next) => {
     message: 'Password changed successfully.',
   });
 });
+
 // ------------------------------------------------------------------
 // DELETE /users/:id   (Admin)
 // ------------------------------------------------------------------
@@ -248,7 +199,11 @@ exports.deleteUser = catchAsync(async (req, res, next) => {
   const user = await User.findById(req.params.id);
 
   if (!user) {
-    return next(new AppError('User not found.', 404));
+    return next(new AppError(MESSAGES.USER_NOT_FOUND, 404));
+  }
+
+  if (user.avatar && user.avatar.publicId) {
+    await deleteFromCloudinary(user.avatar.publicId);
   }
 
   await user.deleteOne();

@@ -6,7 +6,7 @@ const generateToken = require('../utils/generateToken');
 const generateOtp = require('../utils/generateOtp');
 const { sendEmail, otpEmailTemplate, resetPasswordEmailTemplate } = require('../utils/sendEmail');
 const { generateResetToken, hashToken } = require('../utils/generateResetToken');
-
+const MESSAGES = require('../constants/messages');
 const OTP_EXPIRY_MINUTES = 10;
 
 // ------------------------------------------------------------------
@@ -220,5 +220,41 @@ exports.getMe = catchAsync(async (req, res, next) => {
   res.status(200).json({
     success: true,
     data: { user },
+  });
+});
+// ------------------------------------------------------------------
+// PATCH /auth/users/:id/role   (Admin)
+// Dedicated endpoint for promoting/demoting a user's role. Kept
+// separate from user profile updates so a regular user can never
+// change their own role through the normal profile-update flow.
+// ------------------------------------------------------------------
+exports.changeUserRole = catchAsync(async (req, res, next) => {
+  const { role } = req.body;
+
+  const user = await User.findById(req.params.id);
+  if (!user) {
+    return next(new AppError(MESSAGES.USER_NOT_FOUND, 404));
+  }
+
+  // Prevent an admin from accidentally demoting themselves, which
+  // could lock everyone out of admin-only endpoints.
+  if (user._id.toString() === req.user._id.toString() && role !== 'admin') {
+    return next(new AppError('You cannot change your own role.', 400));
+  }
+
+  user.role = role;
+  await user.save();
+
+  res.status(200).json({
+    success: true,
+    message: `User role updated to "${role}" successfully.`,
+    data: {
+      user: {
+        id: user._id,
+        username: user.username,
+        email: user.email,
+        role: user.role,
+      },
+    },
   });
 });

@@ -10,16 +10,8 @@ const {
   addUserSchema,
   updateUserSchema,
   changePasswordSchema,
-  changeRoleSchema,
 } = require('../validation/user.validation');
-// PATCH /users/:id/role — Admin only: change a user's role
-router.patch(
-  '/:id/role',
-  protect,
-  adminOnly,
-  validate(changeRoleSchema),
-  userController.changeUserRole
-);
+
 // POST /users/add — Admin only: add a new user from the admin panel
 router.post('/add', protect, adminOnly, validate(addUserSchema), userController.addUser);
 

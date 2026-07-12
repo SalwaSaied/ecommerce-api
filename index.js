@@ -8,6 +8,7 @@ const connectDB = require('./DB/connection');
 const errorHandler = require('./middleware/error.middleware');
 const authRoutes = require('./routes/auth.routes');
 const userRoutes = require('./routes/user.routes');
+const productRoutes = require('./routes/product.routes');
 
 
 const app = express();
@@ -26,6 +27,7 @@ connectDB();
 // Routes
 app.use('/auth', authRoutes);
 app.use('/users', userRoutes);
+app.use('/products', productRoutes);
 
 // Health check
 app.get('/', (req, res) => {

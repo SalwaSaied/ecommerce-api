@@ -3,7 +3,7 @@ const router = express.Router();
 
 const authController = require('../controllers/auth.controller');
 const validate = require('../middleware/validate.middleware');
-const { protect } = require('../middleware/auth.middleware');
+const { protect, adminOnly } = require('../middleware/auth.middleware');
 
 const {
   registerSendOtpSchema,
@@ -11,6 +11,7 @@ const {
   loginSchema,
   forgotPasswordSchema,
   resetPasswordSchema,
+  changeRoleSchema,
 } = require('../validation/auth.validation');
 
 // Public
@@ -28,5 +29,15 @@ router.patch('/resetpassword/:token', validate(resetPasswordSchema), authControl
 // Protected (requires valid JWT)
 router.post('/logout', protect, authController.logout);
 router.get('/me', protect, authController.getMe);
+
+// Admin only — change another user's role (moved here from the Users
+// module since it's fundamentally a permissions/security action)
+router.patch(
+  '/users/:id/role',
+  protect,
+  adminOnly,
+  validate(changeRoleSchema),
+  authController.changeUserRole
+);
 
 module.exports = router;

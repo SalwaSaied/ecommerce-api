@@ -11,7 +11,8 @@ const addUserSchema = Joi.object({
 
 // PATCH /users/:id (User) — a user updating their own profile.
 // Note: role and password are intentionally NOT allowed here.
-// - role: only an admin flow (if added later) should change roles.
+// - role: has its own dedicated endpoint under Auth (see changeRoleSchema
+//   in auth.validation.js).
 // - password: has its own dedicated endpoint (see changePasswordSchema)
 //   that requires the current password, for security.
 // "addresses" arrives as a JSON string (this endpoint accepts
@@ -22,7 +23,11 @@ const updateUserSchema = Joi.object({
   username: Joi.string().trim().min(3).max(50).optional(),
   phone: Joi.string().trim().optional(),
   addresses: Joi.string().optional(),
-})
+});
+// Note: no .min(1) here on purpose — a request with ONLY an avatar file
+// and no text fields is valid, but Joi only sees req.body (text fields),
+// not req.file. The "at least one field" check happens in the
+// controller instead, where both body fields AND req.file are visible.
 
 // POST /users/change-password (User) — dedicated password-change endpoint.
 // Requires the current password to prevent someone with a stolen/valid
@@ -32,11 +37,4 @@ const changePasswordSchema = Joi.object({
   newPassword: Joi.string().min(8).required(),
 });
 
-// PATCH /users/:id/role (Admin) — dedicated endpoint for changing a
-// user's role. Kept separate from updateUser so a regular user can
-// never promote themselves to admin through the normal profile update.
-const changeRoleSchema = Joi.object({
-  role: Joi.string().valid('admin', 'customer').required(),
-});
-
-module.exports = { addUserSchema, updateUserSchema, changePasswordSchema, changeRoleSchema };
+module.exports = { addUserSchema, updateUserSchema, changePasswordSchema };

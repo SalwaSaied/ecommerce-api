@@ -43,3 +43,34 @@ exports.adminOnly = (req, res, next) => {
   }
   next();
 };
+// Optional authentication — used on PUBLIC routes that still need to
+// know "is this an admin?" (e.g. product listings show inactive
+// products to admins but not to anyone else). Unlike `protect`, this
+// NEVER blocks the request: a missing or invalid token simply leaves
+// req.user undefined, and the route continues as an anonymous request.
+exports.optionalAuth = catchAsync(async (req, res, next) => {
+  let token;
+
+  if (req.headers.authorization && req.headers.authorization.startsWith('Bearer')) {
+    token = req.headers.authorization.split(' ')[1];
+  } else if (req.cookies && req.cookies.token) {
+    token = req.cookies.token;
+  }
+
+  if (!token) {
+    return next(); // no token — proceed as anonymous
+  }
+
+  try {
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    const currentUser = await User.findById(decoded.id);
+    if (currentUser) {
+      req.user = currentUser;
+    }
+  } catch (err) {
+    // Invalid/expired token on a public route — ignore it rather than
+    // blocking access; the request just continues as anonymous.
+  }
+
+  next();
+});
