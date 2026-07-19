@@ -12,5 +12,7 @@ module.exports = {
   INVALID_COUPON: 'Invalid coupon code.',
   WISHLIST_NOT_FOUND: 'Wishlist not found.',
   PRODUCT_ALREADY_IN_WISHLIST: 'Product is already in your wishlist.',
+  ORDER_NOT_FOUND: 'Order not found.',
+
   
 };

@@ -51,4 +51,65 @@ const resetPasswordEmailTemplate = (resetLink) => `
   </div>
 `;
 
-module.exports = { sendEmail, otpEmailTemplate, resetPasswordEmailTemplate };
+// Order confirmation email — shows a simple line-item summary + totals
+const orderConfirmationEmailTemplate = (order) => {
+  const itemsRows = order.items
+    .map(
+      (item) => `
+        <tr>
+          <td style="padding:8px;border-bottom:1px solid #eee;">${item.name}</td>
+          <td style="padding:8px;border-bottom:1px solid #eee;">${item.quantity}</td>
+          <td style="padding:8px;border-bottom:1px solid #eee;">${item.price} EGP</td>
+        </tr>`
+    )
+    .join('');
+
+  return `
+    <div style="font-family: Arial, sans-serif; max-width: 480px; margin: auto;">
+      <h2>Order Confirmed</h2>
+      <p>Thanks for your order! Here's a summary:</p>
+      <table style="width:100%; border-collapse: collapse;">
+        <thead>
+          <tr>
+            <th style="text-align:left; padding:8px;">Item</th>
+            <th style="text-align:left; padding:8px;">Qty</th>
+            <th style="text-align:left; padding:8px;">Price</th>
+          </tr>
+        </thead>
+        <tbody>${itemsRows}</tbody>
+      </table>
+      <p><strong>Subtotal:</strong> ${order.subtotal} EGP</p>
+      <p><strong>Shipping:</strong> ${order.shippingFee} EGP</p>
+      <p><strong>Tax:</strong> ${order.tax} EGP</p>
+      <p><strong>Discount:</strong> -${order.discount} EGP</p>
+      <p style="font-size:18px;"><strong>Total: ${order.totalPrice} EGP</strong></p>
+    </div>
+  `;
+};
+
+// Order status update email — used whenever an admin changes an order's status
+const orderStatusUpdateEmailTemplate = (order) => `
+  <div style="font-family: Arial, sans-serif; max-width: 480px; margin: auto;">
+    <h2>Order Update</h2>
+    <p>Your order status has been updated to: <strong>${order.status}</strong></p>
+    <p>Order total: ${order.totalPrice} EGP</p>
+  </div>
+`;
+
+// Order cancelled email
+const orderCancelledEmailTemplate = (order) => `
+  <div style="font-family: Arial, sans-serif; max-width: 480px; margin: auto;">
+    <h2>Order Cancelled</h2>
+    <p>Your order has been cancelled, and any reserved stock has been released.</p>
+    <p>Order total: ${order.totalPrice} EGP</p>
+  </div>
+`;
+
+module.exports = {
+  sendEmail,
+  otpEmailTemplate,
+  resetPasswordEmailTemplate,
+  orderConfirmationEmailTemplate,
+  orderStatusUpdateEmailTemplate,
+  orderCancelledEmailTemplate,
+};
