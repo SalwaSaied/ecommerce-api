@@ -100,7 +100,7 @@ exports.placeOrder = catchAsync(async (req, res, next) => {
     await sendEmail({
       to: req.user.email,
       subject: 'Order Confirmation — SEF Academy Store',
-      html: orderConfirmationEmailTemplate(order),
+      html: orderConfirmationEmailTemplate(order, req.user.username),
     });
   } catch (err) {
     // intentionally ignored — the order itself already succeeded

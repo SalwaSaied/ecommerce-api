@@ -51,29 +51,35 @@ const resetPasswordEmailTemplate = (resetLink) => `
   </div>
 `;
 
-// Order confirmation email — shows a simple line-item summary + totals
-const orderConfirmationEmailTemplate = (order) => {
+
+// Order confirmation email — dark-themed, with a per-item total column,
+// order ID, and payment method 
+const orderConfirmationEmailTemplate = (order, username) => {
   const itemsRows = order.items
     .map(
       (item) => `
         <tr>
-          <td style="padding:8px;border-bottom:1px solid #eee;">${item.name}</td>
-          <td style="padding:8px;border-bottom:1px solid #eee;">${item.quantity}</td>
-          <td style="padding:8px;border-bottom:1px solid #eee;">${item.price} EGP</td>
+          <td style="padding:10px; border-bottom:1px solid #333; color:#eee;">${item.name}</td>
+          <td style="padding:10px; border-bottom:1px solid #333; color:#eee; text-align:center;">${item.quantity}</td>
+          <td style="padding:10px; border-bottom:1px solid #333; color:#eee;">${item.price} EGP</td>
+          <td style="padding:10px; border-bottom:1px solid #333; color:#eee;">${(item.price * item.quantity).toFixed(2)} EGP</td>
         </tr>`
     )
     .join('');
 
   return `
-    <div style="font-family: Arial, sans-serif; max-width: 480px; margin: auto;">
-      <h2>Order Confirmed</h2>
-      <p>Thanks for your order! Here's a summary:</p>
-      <table style="width:100%; border-collapse: collapse;">
+    <div style="font-family: Arial, sans-serif; max-width: 480px; margin: auto; background:#121212; color:#eee; padding:24px; border-radius:10px;">
+      <h2 style="color:#fff; margin-top:0;">Order Confirmation</h2>
+      <p>Hello <strong>${username}</strong>,</p>
+      <p>Thank you for your order. Your order has been placed successfully.</p>
+      <p><strong>Order ID:</strong> ${order._id}</p>
+      <table style="width:100%; border-collapse: collapse; margin: 16px 0;">
         <thead>
           <tr>
-            <th style="text-align:left; padding:8px;">Item</th>
-            <th style="text-align:left; padding:8px;">Qty</th>
-            <th style="text-align:left; padding:8px;">Price</th>
+            <th style="text-align:left; padding:10px; border-bottom:2px solid #444; color:#aaa;">Product</th>
+            <th style="text-align:center; padding:10px; border-bottom:2px solid #444; color:#aaa;">Quantity</th>
+            <th style="text-align:left; padding:10px; border-bottom:2px solid #444; color:#aaa;">Unit Price</th>
+            <th style="text-align:left; padding:10px; border-bottom:2px solid #444; color:#aaa;">Total</th>
           </tr>
         </thead>
         <tbody>${itemsRows}</tbody>
@@ -81,8 +87,9 @@ const orderConfirmationEmailTemplate = (order) => {
       <p><strong>Subtotal:</strong> ${order.subtotal} EGP</p>
       <p><strong>Shipping:</strong> ${order.shippingFee} EGP</p>
       <p><strong>Tax:</strong> ${order.tax} EGP</p>
-      <p><strong>Discount:</strong> -${order.discount} EGP</p>
+      <p><strong>Discount:</strong> ${order.discount} EGP</p>
       <p style="font-size:18px;"><strong>Total: ${order.totalPrice} EGP</strong></p>
+      <p><strong>Payment Method:</strong> ${order.paymentMethod}</p>
     </div>
   `;
 };
