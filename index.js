@@ -12,6 +12,7 @@ const productRoutes = require('./routes/product.routes');
 const cartRoutes = require('./routes/cart.routes');
 const wishlistRoutes = require('./routes/wishlist.routes');
 const orderRoutes = require('./routes/order.routes');
+const orderController = require('./controllers/order.controller');
 
 
 
@@ -19,6 +20,12 @@ const app = express();
 
 // Core middleware
 app.use(cors());
+// Stripe webhook needs the RAW request body for signature verification,
+// so it must be registered BEFORE express.json() parses everything.
+// It's declared directly here (not inside order.routes.js) because it
+// needs its own body-parsing middleware, different from the rest of
+// the app.
+app.post('/orders/webhook/stripe', express.raw({ type: 'application/json' }), orderController.stripeWebhook);
 app.use(express.json());
 app.use(cookieParser());
 if (process.env.NODE_ENV === 'development') {

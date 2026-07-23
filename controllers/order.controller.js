@@ -6,6 +6,7 @@ const User = require('../models/User.model');
 const catchAsync = require('../utils/catchAsync');
 const AppError = require('../utils/AppError');
 const MESSAGES = require('../constants/messages');
+const stripe = require('../utils/stripe');
 const {
   sendEmail,
   orderConfirmationEmailTemplate,
@@ -13,21 +14,12 @@ const {
   orderCancelledEmailTemplate,
 } = require('../utils/sendEmail');
 
-const FREE_SHIPPING_THRESHOLD = 1000; // EGP
-const SHIPPING_FEE = 50; // EGP
-const TAX_RATE = 0.14; // 14% VAT
+const FREE_SHIPPING_THRESHOLD = 1000;
+const SHIPPING_FEE = 50;
+const TAX_RATE = 0.14;
 
 // ------------------------------------------------------------------
 // POST /orders   (User)
-// Converts the user's cart into a real order, inside a Mongoose
-// Transaction so the order and the cart-clearing either BOTH succeed
-// or BOTH roll back — never a half-finished state.
-//
-// Stock note: stock was already deducted when each item was added to
-// the cart (see cart.controller.js), so placing the order does NOT
-// deduct stock again — it just finalizes the reservation. We only
-// re-verify every product still exists, as a safety net against a
-// product being deleted between "add to cart" and "checkout".
 // ------------------------------------------------------------------
 exports.placeOrder = catchAsync(async (req, res, next) => {
   const { shippingAddress, paymentMethod, customerNote } = req.body;
@@ -53,6 +45,21 @@ exports.placeOrder = catchAsync(async (req, res, next) => {
   const method = paymentMethod || 'cash';
   const initialStatus = method === 'cash' ? 'confirmed' : 'pending';
 
+  // Stripe's PaymentIntent is an EXTERNAL network call — it must happen
+  // BEFORE we open a Mongo transaction, never inside one.
+  let transactionId = null;
+  let clientSecret = null;
+
+  if (method === 'stripe') {
+    const paymentIntent = await stripe.paymentIntents.create({
+      amount: Math.round(totalPrice * 100), // Stripe uses the smallest currency unit
+      currency: 'egp',
+      metadata: { userId: req.user._id.toString() },
+    });
+    transactionId = paymentIntent.id;
+    clientSecret = paymentIntent.client_secret;
+  }
+
   const session = await mongoose.startSession();
   let order;
 
@@ -72,6 +79,7 @@ exports.placeOrder = catchAsync(async (req, res, next) => {
             shippingAddress,
             paymentMethod: method,
             paymentStatus: 'pending',
+            transactionId,
             subtotal,
             shippingFee,
             tax,
@@ -96,21 +104,77 @@ exports.placeOrder = catchAsync(async (req, res, next) => {
     session.endSession();
   }
 
-  try {
-    await sendEmail({
-      to: req.user.email,
-      subject: 'Order Confirmation — SEF Academy Store',
-      html: orderConfirmationEmailTemplate(order, req.user.username),
-    });
-  } catch (err) {
-    // intentionally ignored — the order itself already succeeded
+  // Cash orders are already confirmed, so we email right away. Stripe
+  // orders are still "pending" — their confirmation email is sent later
+  // by the webhook, once payment actually succeeds.
+  if (method === 'cash') {
+    try {
+      await sendEmail({
+        to: req.user.email,
+        subject: 'Order Confirmation — SEF Academy Store',
+        html: orderConfirmationEmailTemplate(order, req.user.username),
+      });
+    } catch (err) {
+      // intentionally ignored — the order itself already succeeded
+    }
   }
 
   res.status(201).json({
     success: true,
     message: 'Order placed successfully.',
     order,
+    ...(clientSecret && { clientSecret }),
   });
+});
+
+// ------------------------------------------------------------------
+// POST /orders/webhook/stripe   (Public — called by Stripe, not the frontend)
+// ------------------------------------------------------------------
+exports.stripeWebhook = catchAsync(async (req, res, next) => {
+  const signature = req.headers['stripe-signature'];
+  let event;
+
+  try {
+    event = stripe.webhooks.constructEvent(req.body, signature, process.env.STRIPE_WEBHOOK_SECRET);
+  } catch (err) {
+    return res.status(400).send(`Webhook signature verification failed: ${err.message}`);
+  }
+
+  if (event.type === 'payment_intent.succeeded') {
+    const paymentIntent = event.data.object;
+    const order = await Order.findOne({ transactionId: paymentIntent.id });
+
+    if (order && order.paymentStatus !== 'paid') {
+      order.paymentStatus = 'paid';
+      order.paidAt = new Date();
+      if (order.status === 'pending') order.status = 'confirmed';
+      await order.save();
+
+      const orderOwner = await User.findById(order.user);
+      if (orderOwner) {
+        try {
+          await sendEmail({
+            to: orderOwner.email,
+            subject: 'Order Confirmation — SEF Academy Store',
+            html: orderConfirmationEmailTemplate(order, orderOwner.username),
+          });
+        } catch (err) {
+          // intentionally ignored
+        }
+      }
+    }
+  }
+
+  if (event.type === 'payment_intent.payment_failed') {
+    const paymentIntent = event.data.object;
+    const order = await Order.findOne({ transactionId: paymentIntent.id });
+    if (order) {
+      order.paymentStatus = 'failed';
+      await order.save();
+    }
+  }
+
+  res.status(200).json({ received: true });
 });
 
 // ------------------------------------------------------------------
@@ -143,15 +207,8 @@ exports.getMyOrders = catchAsync(async (req, res, next) => {
 // ------------------------------------------------------------------
 exports.getMyOrderById = catchAsync(async (req, res, next) => {
   const order = await Order.findOne({ _id: req.params.id, user: req.user._id });
-
-  if (!order) {
-    return next(new AppError(MESSAGES.ORDER_NOT_FOUND, 404));
-  }
-
-  res.status(200).json({
-    success: true,
-    order,
-  });
+  if (!order) return next(new AppError(MESSAGES.ORDER_NOT_FOUND, 404));
+  res.status(200).json({ success: true, order });
 });
 
 // ------------------------------------------------------------------
@@ -159,10 +216,7 @@ exports.getMyOrderById = catchAsync(async (req, res, next) => {
 // ------------------------------------------------------------------
 exports.cancelMyOrder = catchAsync(async (req, res, next) => {
   const order = await Order.findOne({ _id: req.params.id, user: req.user._id });
-
-  if (!order) {
-    return next(new AppError(MESSAGES.ORDER_NOT_FOUND, 404));
-  }
+  if (!order) return next(new AppError(MESSAGES.ORDER_NOT_FOUND, 404));
 
   if (!['pending', 'confirmed'].includes(order.status)) {
     return next(new AppError('Cannot cancel order in current status.', 400));
@@ -192,11 +246,7 @@ exports.cancelMyOrder = catchAsync(async (req, res, next) => {
     // intentionally ignored
   }
 
-  res.status(200).json({
-    success: true,
-    message: 'Order cancelled successfully.',
-    order,
-  });
+  res.status(200).json({ success: true, message: 'Order cancelled successfully.', order });
 });
 
 // ------------------------------------------------------------------
@@ -231,12 +281,7 @@ exports.getDashboardStats = catchAsync(async (req, res, next) => {
       { $group: { _id: null, total: { $sum: '$totalPrice' } } },
     ]),
     Order.aggregate([
-      {
-        $match: {
-          paymentStatus: 'paid',
-          createdAt: { $gte: startOfLastMonth, $lte: endOfLastMonth },
-        },
-      },
+      { $match: { paymentStatus: 'paid', createdAt: { $gte: startOfLastMonth, $lte: endOfLastMonth } } },
       { $group: { _id: null, total: { $sum: '$totalPrice' } } },
     ]),
     Order.find().sort({ createdAt: -1 }).limit(5),
@@ -318,7 +363,6 @@ exports.getActiveCartsAdmin = catchAsync(async (req, res, next) => {
   const page = Number(req.query.page) || 1;
   const limit = Number(req.query.limit) || 20;
   const skip = (page - 1) * limit;
-
   const filter = { 'items.0': { $exists: true } };
 
   const [carts, total] = await Promise.all([
@@ -361,10 +405,7 @@ exports.getAllOrdersAdmin = catchAsync(async (req, res, next) => {
   const sortDir = req.query.sortDir === 'asc' ? 1 : -1;
 
   const [orders, total] = await Promise.all([
-    Order.find(filter)
-      .sort({ [sortBy]: sortDir })
-      .skip(skip)
-      .limit(limit),
+    Order.find(filter).sort({ [sortBy]: sortDir }).skip(skip).limit(limit),
     Order.countDocuments(filter),
   ]);
 
@@ -382,15 +423,8 @@ exports.getAllOrdersAdmin = catchAsync(async (req, res, next) => {
 // ------------------------------------------------------------------
 exports.getOrderByIdAdmin = catchAsync(async (req, res, next) => {
   const order = await Order.findById(req.params.id).populate('user', 'username email');
-
-  if (!order) {
-    return next(new AppError(MESSAGES.ORDER_NOT_FOUND, 404));
-  }
-
-  res.status(200).json({
-    success: true,
-    order,
-  });
+  if (!order) return next(new AppError(MESSAGES.ORDER_NOT_FOUND, 404));
+  res.status(200).json({ success: true, order });
 });
 
 // ------------------------------------------------------------------
@@ -400,9 +434,7 @@ exports.updateOrderStatusAdmin = catchAsync(async (req, res, next) => {
   const { status, adminNote } = req.body;
 
   const order = await Order.findById(req.params.id);
-  if (!order) {
-    return next(new AppError(MESSAGES.ORDER_NOT_FOUND, 404));
-  }
+  if (!order) return next(new AppError(MESSAGES.ORDER_NOT_FOUND, 404));
 
   if (status === 'cancelled' && order.status !== 'cancelled') {
     await Promise.all(
@@ -439,9 +471,5 @@ exports.updateOrderStatusAdmin = catchAsync(async (req, res, next) => {
     }
   }
 
-  res.status(200).json({
-    success: true,
-    message: 'Order status updated successfully.',
-    order,
-  });
+  res.status(200).json({ success: true, message: 'Order status updated successfully.', order });
 });
