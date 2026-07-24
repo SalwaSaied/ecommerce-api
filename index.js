@@ -58,8 +58,15 @@ app.use((req, res) => {
 app.use(errorHandler);
 
 const PORT = process.env.PORT || 5000;
-app.listen(PORT, () => {
-  console.log(`🚀 Server running on port ${PORT}`);
-});
+
+// Vercel imports this file as a serverless function — it should NOT try
+// to bind a port there. This check is only true when running the file
+// directly (npm run dev / node index.js), which is exactly when we
+// want app.listen() to actually happen.
+if (require.main === module) {
+  app.listen(PORT, () => {
+    console.log(`🚀 Server running on port ${PORT}`);
+  });
+}
 
 module.exports = app;
