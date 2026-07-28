@@ -14,22 +14,33 @@ const wishlistRoutes = require('./routes/wishlist.routes');
 const orderRoutes = require('./routes/order.routes');
 const orderController = require('./controllers/order.controller');
 
-
-
 const app = express();
 app.use(express.static('public'));
+
 // Core middleware
 app.use(cors());
+
+
+app.use(async (req, res, next) => {
+  try {
+    await connectDB();
+    next();
+  } catch (err) {
+    res.status(500).json({
+      success: false,
+      message: 'Database connection failed. Please try again shortly.',
+    });
+  }
+});
+
 // Stripe webhook needs the RAW request body for signature verification,
 app.post('/orders/webhook/stripe', express.raw({ type: 'application/json' }), orderController.stripeWebhook);
+
 app.use(express.json());
 app.use(cookieParser());
 if (process.env.NODE_ENV === 'development') {
   app.use(morgan('dev'));
 }
-
-// Connect to MongoDB
-connectDB();
 
 // Routes
 app.use('/auth', authRoutes);
@@ -39,11 +50,11 @@ app.use('/carts', cartRoutes);
 app.use('/wishlists', wishlistRoutes);
 app.use('/orders', orderRoutes);
 
-
 // Health check
 app.get('/', (req, res) => {
   res.status(200).json({ success: true, message: 'Ecommerce API is running 🚀' });
 });
+
 // Serve the Stripe test page as a route
 app.get('/test-stripe', (req, res) => {
   res.send(`
@@ -123,6 +134,7 @@ app.get('/test-stripe', (req, res) => {
 </html>
   `);
 });
+
 // 404 handler for unknown routes
 app.use((req, res) => {
   res.status(404).json({ success: false, message: `Route ${req.originalUrl} not found` });
