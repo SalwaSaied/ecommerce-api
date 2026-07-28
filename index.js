@@ -1,5 +1,4 @@
 require('dotenv').config();
-const path = require('path');
 const express = require('express');
 const cors = require('cors');
 const morgan = require('morgan');
@@ -46,9 +45,6 @@ app.get('/', (req, res) => {
   res.status(200).json({ success: true, message: 'Ecommerce API is running 🚀' });
 });
 
-app.get('/test-stripe.html', (req, res) => {
-  res.sendFile(path.join(__dirname, 'public', 'test-stripe.html'));
-});
 // 404 handler for unknown routes
 app.use((req, res) => {
   res.status(404).json({ success: false, message: `Route ${req.originalUrl} not found` });
