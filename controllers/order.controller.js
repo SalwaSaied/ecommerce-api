@@ -45,14 +45,12 @@ exports.placeOrder = catchAsync(async (req, res, next) => {
   const method = paymentMethod || 'cash';
   const initialStatus = method === 'cash' ? 'confirmed' : 'pending';
 
-  // Stripe's PaymentIntent is an EXTERNAL network call — it must happen
-  // BEFORE we open a Mongo transaction, never inside one.
   let transactionId = null;
   let clientSecret = null;
 
   if (method === 'stripe') {
     const paymentIntent = await stripe.paymentIntents.create({
-      amount: Math.round(totalPrice * 100), // Stripe uses the smallest currency unit
+      amount: Math.round(totalPrice * 100), 
       currency: 'egp',
       metadata: { userId: req.user._id.toString() },
     });
@@ -104,9 +102,7 @@ exports.placeOrder = catchAsync(async (req, res, next) => {
     session.endSession();
   }
 
-  // Cash orders are already confirmed, so we email right away. Stripe
-  // orders are still "pending" — their confirmation email is sent later
-  // by the webhook, once payment actually succeeds.
+
   if (method === 'cash') {
     try {
       await sendEmail({
@@ -115,7 +111,6 @@ exports.placeOrder = catchAsync(async (req, res, next) => {
         html: orderConfirmationEmailTemplate(order, req.user.username),
       });
     } catch (err) {
-      // intentionally ignored — the order itself already succeeded
     }
   }
 
@@ -159,7 +154,7 @@ exports.stripeWebhook = catchAsync(async (req, res, next) => {
             html: orderConfirmationEmailTemplate(order, orderOwner.username),
           });
         } catch (err) {
-          // intentionally ignored
+          
         }
       }
     }
