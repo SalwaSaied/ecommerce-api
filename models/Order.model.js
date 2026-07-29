@@ -1,8 +1,6 @@
 const mongoose = require('mongoose');
 
-// Snapshot of a cart item at the moment the order was placed — same
-// snapshot idea as the cart, so the order stays historically accurate
-// even if the product's price/name/image change later.
+// Snapshot of a cart item at the moment the order was placed 
 const orderItemSchema = new mongoose.Schema(
   {
     product: {
@@ -81,8 +79,7 @@ const orderSchema = new mongoose.Schema(
   { timestamps: true }
 );
 
-// Supporting indexes: fast lookup of "my orders" sorted by date, and
-// fast filtering by status/paymentStatus on the admin orders list.
+// Supporting indexes
 orderSchema.index({ user: 1, createdAt: -1 });
 orderSchema.index({ status: 1 });
 orderSchema.index({ paymentStatus: 1 });

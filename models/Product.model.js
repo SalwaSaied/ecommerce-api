@@ -1,9 +1,7 @@
 const mongoose = require('mongoose');
 const slugify = require('slugify');
 
-// Embedded review subdocument — one per user per product (enforced in
-// the controller, not here, since Mongoose doesn't easily support
-// "unique per parent array" constraints).
+// Embedded review subdocument — one per user per product 
 const reviewSchema = new mongoose.Schema(
   {
     user: {
@@ -130,7 +128,6 @@ const productSchema = new mongoose.Schema(
 );
 
 // Auto-generate a unique, URL-friendly slug whenever the name changes.
-// A short timestamp suffix keeps it unique even for duplicate names.
 productSchema.pre('save', function (next) {
   if (this.isModified('name')) {
     this.slug = `${slugify(this.name, { lower: true, strict: true })}-${Date.now().toString(36)}`;
@@ -139,8 +136,7 @@ productSchema.pre('save', function (next) {
 });
 
 // Recalculates averageRating and numReviews from the current reviews
-// array. Called after a review is added or removed — the caller is
-// responsible for saving the document afterwards.
+// array. 
 productSchema.methods.calcAverageRating = function () {
   if (this.reviews.length === 0) {
     this.averageRating = 0;

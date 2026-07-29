@@ -1,8 +1,7 @@
 const multer = require('multer');
 const AppError = require('../utils/AppError');
 
-// Store the file in memory as a Buffer (not on disk) so we can stream it
-// straight to Cloudinary without ever writing a temp file.
+// Store the file in memory as a Buffer (not on disk) .
 const storage = multer.memoryStorage();
 
 const fileFilter = (req, file, cb) => {

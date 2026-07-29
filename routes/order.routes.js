@@ -20,9 +20,6 @@ router.get('/my/:id', protect, orderController.getMyOrderById);
 router.patch('/my/:id/cancel', protect, orderController.cancelMyOrder);
 
 // --- Admin routes ---
-// IMPORTANT: /admin/dashboard and /admin/carts must be declared BEFORE
-// /admin/:id, otherwise Express would treat "dashboard" or "carts" as
-// an order id and these routes would never be reached.
 router.get('/admin/dashboard', protect, adminOnly, orderController.getDashboardStats);
 router.get('/admin/carts', protect, adminOnly, orderController.getActiveCartsAdmin);
 router.get('/admin', protect, adminOnly, orderController.getAllOrdersAdmin);

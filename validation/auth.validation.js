@@ -27,15 +27,11 @@ const forgotPasswordSchema = Joi.object({
 });
 
 // Note: the reset token itself comes from the URL param (/:token),
-// not the body — so this schema only validates the new password.
 const resetPasswordSchema = Joi.object({
   newPassword: Joi.string().min(8).required(),
 });
 
-// PATCH /auth/users/:id/role (Admin) — dedicated endpoint for changing a
-// user's role. Kept separate from user profile updates so a regular
-// user can never promote themselves to admin, and grouped with Auth
-// since it's fundamentally a permissions/security action.
+// PATCH /auth/users/:id/role (Admin)
 const changeRoleSchema = Joi.object({
   role: Joi.string().valid('admin', 'customer').required(),
 });

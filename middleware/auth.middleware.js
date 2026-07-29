@@ -3,9 +3,7 @@ const catchAsync = require('../utils/catchAsync');
 const AppError = require('../utils/AppError');
 const User = require('../models/User.model');
 
-// Verifies the JWT sent in the Authorization header and attaches the
-// authenticated user to req.user. Blocks the request if the token is
-// missing, invalid, expired, or the user no longer exists.
+// Verifies the JWT sent in the Authorization header 
 exports.protect = catchAsync(async (req, res, next) => {
   let token;
 
@@ -43,11 +41,7 @@ exports.adminOnly = (req, res, next) => {
   }
   next();
 };
-// Optional authentication — used on PUBLIC routes that still need to
-// know "is this an admin?" (e.g. product listings show inactive
-// products to admins but not to anyone else). Unlike `protect`, this
-// NEVER blocks the request: a missing or invalid token simply leaves
-// req.user undefined, and the route continues as an anonymous request.
+// Optional authentication 
 exports.optionalAuth = catchAsync(async (req, res, next) => {
   let token;
 
@@ -68,8 +62,7 @@ exports.optionalAuth = catchAsync(async (req, res, next) => {
       req.user = currentUser;
     }
   } catch (err) {
-    // Invalid/expired token on a public route — ignore it rather than
-    // blocking access; the request just continues as anonymous.
+    
   }
 
   next();

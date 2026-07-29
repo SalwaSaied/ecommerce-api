@@ -93,9 +93,6 @@ exports.clearWishlist = catchAsync(async (req, res, next) => {
 });
 // ------------------------------------------------------------------
 // GET /wishlists/admin/all   (Admin)
-// Paginated list of every user's wishlist, with the user and products
-// populated (products are auto-populated by the model's pre-find hook;
-// user is populated explicitly here since regular lookups don't need it).
 // ------------------------------------------------------------------
 exports.getAllWishlistsAdmin = catchAsync(async (req, res, next) => {
   const page = Number(req.query.page) || 1;
@@ -118,9 +115,6 @@ exports.getAllWishlistsAdmin = catchAsync(async (req, res, next) => {
 
 // ------------------------------------------------------------------
 // GET /wishlists/admin/stats   (Admin)
-// Aggregation-based stats: total wishlists, total products saved
-// across all wishlists combined, and the top 10 most-wishlisted
-// products (with a $lookup to pull in their name/image).
 // ------------------------------------------------------------------
 exports.getWishlistStatsAdmin = catchAsync(async (req, res, next) => {
   const [totalWishlists, totalProductsAgg, topProducts] = await Promise.all([

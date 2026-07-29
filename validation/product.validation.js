@@ -1,7 +1,6 @@
 const Joi = require('joi');
 
-// A JSON-array-looking string, e.g. '["a","b"]' or '[]' — used for
-// fields sent as text inside multipart/form-data (tags, deleteImages).
+// A JSON-array-looking string
 const jsonArrayPattern = /^\[.*\]$/;
 
 const createProductSchema = Joi.object({

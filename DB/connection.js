@@ -1,11 +1,6 @@
 const mongoose = require('mongoose');
 
-// In serverless environments (Vercel), this module can be re-invoked
-// on a "cold start" for every new function instance. We cache the
-// connection (and the in-flight connection PROMISE) on the global
-// object so repeated invocations reuse the same connection instead of
-// opening a new one every time — opening too many connections quickly
-// exhausts MongoDB Atlas's connection limit.
+// Serverless environments (Vercel)
 let cached = global._mongooseConnection;
 if (!cached) {
   cached = global._mongooseConnection = { conn: null, promise: null };

@@ -1,12 +1,11 @@
 const nodemailer = require('nodemailer');
 
 // Reusable transporter + send function.
-// Usage: await sendEmail({ to, subject, html })
 const sendEmail = async ({ to, subject, html, text }) => {
   const transporter = nodemailer.createTransport({
     host: process.env.EMAIL_HOST,
     port: process.env.EMAIL_PORT,
-    secure: Number(process.env.EMAIL_PORT) === 465, // true for 465, false for other ports
+    secure: Number(process.env.EMAIL_PORT) === 465, 
     auth: {
       user: process.env.EMAIL_USER,
       pass: process.env.EMAIL_PASS,
@@ -34,8 +33,7 @@ const otpEmailTemplate = (otp, purpose = 'verify your account') => `
   </div>
 `;
 
-// Ready-made template for the "forgot password" email — contains a
-// clickable link (not a code) with the raw reset token embedded in the URL.
+// Ready-made template for the "forgot password" email 
 const resetPasswordEmailTemplate = (resetLink) => `
   <div style="font-family: Arial, sans-serif; max-width: 480px; margin: auto;">
     <h2>Reset Your Password</h2>

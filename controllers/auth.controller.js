@@ -10,9 +10,7 @@ const MESSAGES = require('../constants/messages');
 const OTP_EXPIRY_MINUTES = 10;
 
 // ------------------------------------------------------------------
-// POST /auth/register/send-otp   (Public)
-// Validates the new user doesn't already exist, generates an OTP,
-// stashes the pending registration data on the OTP doc, emails the code.
+// POST /auth/register/send-otp   (Public).
 // ------------------------------------------------------------------
 exports.registerSendOtp = catchAsync(async (req, res, next) => {
   const { username, email, password, phone } = req.body;
@@ -22,7 +20,6 @@ exports.registerSendOtp = catchAsync(async (req, res, next) => {
     return next(new AppError('An account with this email already exists.', 400));
   }
 
-  // Remove any previous pending registration OTP for this email
   await OTP.deleteMany({ email, purpose: 'register' });
 
   const otp = generateOtp();
@@ -48,8 +45,6 @@ exports.registerSendOtp = catchAsync(async (req, res, next) => {
 
 // ------------------------------------------------------------------
 // POST /auth/verify-otp   (Public)
-// Verifies the OTP, creates the real User document from the stashed
-// data, deletes the OTP record, and logs the user in.
 // ------------------------------------------------------------------
 exports.verifyOtp = catchAsync(async (req, res, next) => {
   const { email, otp } = req.body;
@@ -128,9 +123,6 @@ exports.login = catchAsync(async (req, res, next) => {
 
 // ------------------------------------------------------------------
 // POST /auth/logout   (User)
-// This project uses a stateless JWT sent in the Authorization header
-// (not a cookie), so the server never holds a session to invalidate.
-// "Logging out" simply means the client discards the token it's holding.
 // ------------------------------------------------------------------
 exports.logout = catchAsync(async (req, res, next) => {
   res.status(200).json({
@@ -141,9 +133,6 @@ exports.logout = catchAsync(async (req, res, next) => {
 
 // ------------------------------------------------------------------
 // POST /auth/forgotpassword   (Public)
-// Generates a random reset token, stores only its HASH on the user
-// document (never the raw token), and emails the user a clickable link
-// containing the raw token: {CLIENT_URL}/reset-password/{resetToken}
 // ------------------------------------------------------------------
 exports.forgotPassword = catchAsync(async (req, res, next) => {
   const { email } = req.body;
@@ -183,8 +172,6 @@ exports.forgotPassword = catchAsync(async (req, res, next) => {
 
 // ------------------------------------------------------------------
 // PATCH /auth/resetpassword/:token   (Public)
-// The token arrives in the URL (exactly what the emailed link contains).
-// We hash it and compare against the hash stored on the user document.
 // ------------------------------------------------------------------
 exports.resetPassword = catchAsync(async (req, res, next) => {
   const { token } = req.params;
@@ -224,9 +211,6 @@ exports.getMe = catchAsync(async (req, res, next) => {
 });
 // ------------------------------------------------------------------
 // PATCH /auth/users/:id/role   (Admin)
-// Dedicated endpoint for promoting/demoting a user's role. Kept
-// separate from user profile updates so a regular user can never
-// change their own role through the normal profile-update flow.
 // ------------------------------------------------------------------
 exports.changeUserRole = catchAsync(async (req, res, next) => {
   const { role } = req.body;
@@ -236,8 +220,7 @@ exports.changeUserRole = catchAsync(async (req, res, next) => {
     return next(new AppError(MESSAGES.USER_NOT_FOUND, 404));
   }
 
-  // Prevent an admin from accidentally demoting themselves, which
-  // could lock everyone out of admin-only endpoints.
+  // Prevent an admin from accidentally demoting themselves.
   if (user._id.toString() === req.user._id.toString() && role !== 'admin') {
     return next(new AppError('You cannot change your own role.', 400));
   }

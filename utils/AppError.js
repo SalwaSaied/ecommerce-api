@@ -1,5 +1,4 @@
 // Custom operational error class.
-// Lets controllers do: return next(new AppError('Invalid credentials', 401))
 class AppError extends Error {
   constructor(message, statusCode) {
     super(message);

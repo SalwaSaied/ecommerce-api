@@ -12,11 +12,10 @@ const {
   changePasswordSchema,
 } = require('../validation/user.validation');
 
-// POST /users/add — Admin only: add a new user from the admin panel
+// POST /users/add — Admin only
 router.post('/add', protect, adminOnly, validate(addUserSchema), userController.addUser);
 
-// POST /users/change-password — Any logged-in user: change their own
-// password. Kept separate from PATCH /:id and requires currentPassword.
+// POST /users/change-password — 
 router.post(
   '/change-password',
   protect,
@@ -31,7 +30,6 @@ router.get('/all', protect, adminOnly, userController.getAllUsers);
 router.get('/:id', protect, adminOnly, userController.getUserById);
 
 // PATCH /users/:id — Any logged-in user: update their own data
-// (an admin may also update any user — enforced inside the controller)
 router.patch(
   '/:id',
   protect,

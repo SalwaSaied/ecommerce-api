@@ -134,7 +134,7 @@ exports.updateUser = catchAsync(async (req, res, next) => {
   }
 
   // Upload the NEW image first, delete the OLD one only after that
-  // succeeds — avoids leaving the user with no avatar if the upload fails.
+  // succeeds 
   if (req.file) {
     const uploaded = await uploadToCloudinary(req.file.buffer, 'ecommerce/avatars');
     const oldAvatarPublicId = user.avatar && user.avatar.publicId;

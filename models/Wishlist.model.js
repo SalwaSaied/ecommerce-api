@@ -23,9 +23,7 @@ const wishlistSchema = new mongoose.Schema(
 );
 
 // Auto-populate full product details on EVERY find/findOne/findById
-// query, so no controller ever has to remember to call .populate()
-// manually — the /^find/ regex matches all of Mongoose's find-style
-// query methods.
+// query
 wishlistSchema.pre(/^find/, function (next) {
   this.populate('products');
   next();

@@ -13,9 +13,6 @@ const {
 } = require('../validation/product.validation');
 
 // GET /products/search — Public, but identifies admins via optionalAuth
-// so they can see inactive products too (see searchProducts controller).
-// IMPORTANT: must be declared BEFORE /:id, otherwise Express would treat
-// "search" as an :id value and this route would never be reached.
 router.get('/search', optionalAuth, productController.searchProducts);
 
 // GET /products — Public, but identifies admins via optionalAuth

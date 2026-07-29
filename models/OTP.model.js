@@ -13,16 +13,13 @@ const otpSchema = new mongoose.Schema(
       type: String,
       required: true,
     },
-    // purpose currently only supports 'register' — the password-reset
-    // flow no longer uses OTP (it uses a crypto token + email link instead,
-    // see forgotPassword/resetPassword in auth.controller.js).
+    // purpose currently only supports 'register' 
     purpose: {
       type: String,
       enum: ['register'],
       required: true,
     },
     // Holds the pending registration data until the OTP is verified.
-    // Only used when purpose === 'register'.
     userData: {
       type: Object,
       default: undefined,

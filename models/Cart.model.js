@@ -1,9 +1,6 @@
 const mongoose = require('mongoose');
 
 // Snapshot of a product at the moment it was added to the cart.
-// Storing name/image/price here (not just a reference) means the cart
-// still shows correct historical info even if the product's price or
-// details change later.
 const cartItemSchema = new mongoose.Schema(
   {
     product: {
@@ -64,21 +61,17 @@ const cartSchema = new mongoose.Schema(
   },
   {
     timestamps: true,
-    // Virtuals only get included in the API response if we turn this on —
-    // by default Mongoose hides them from JSON/object output.
     toJSON: { virtuals: true },
     toObject: { virtuals: true },
   }
 );
 
-// subtotal — sum of (price × quantity) across every item. Never stored;
-// recalculated fresh every time it's read.
+// subtotal — sum of (price × quantity) 
 cartSchema.virtual('subtotal').get(function () {
   return this.items.reduce((sum, item) => sum + item.price * item.quantity, 0);
 });
 
-// discountAmount — how much the applied coupon actually saves, based on
-// the CURRENT subtotal (so it stays correct even as the cart changes).
+// discountAmount
 cartSchema.virtual('discountAmount').get(function () {
   if (!this.coupon || !this.coupon.discountType) return 0;
 
@@ -101,8 +94,7 @@ cartSchema.virtual('total').get(function () {
   return Math.max(this.subtotal - this.discountAmount, 0);
 });
 
-// itemCount — total number of units across all items (not just the
-// number of distinct products — 2 shirts + 3 shoes = itemCount 5)
+// itemCount — total number of units across all items 
 cartSchema.virtual('itemCount').get(function () {
   return this.items.reduce((sum, item) => sum + item.quantity, 0);
 });

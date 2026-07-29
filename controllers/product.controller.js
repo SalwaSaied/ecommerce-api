@@ -13,11 +13,7 @@ const parseJsonField = (value, fieldName, next) => {
   }
 };
 
-// Uploads every file in req.files to Cloudinary, ALL-OR-NOTHING:
-// if any single image fails, every image that DID succeed is deleted
-// again, so we never end up with orphaned files on Cloudinary that no
-// product ever references. Think of it like a bank withdrawal — either
-// the whole operation completes, or it's fully rolled back.
+// Uploads every file in req.files to Cloudinary, ALL-OR-NOTHING
 const uploadImages = async (files) => {
   const results = await Promise.allSettled(
     files.map((file) => uploadToCloudinary(file.buffer, 'ecommerce/products'))
@@ -45,9 +41,7 @@ exports.getAllProducts = catchAsync(async (req, res, next) => {
 
   const filter = {};
 
-  // Regular customers (and anonymous visitors) only ever see active
-  // products. Admins can see inactive ones too — useful for managing
-  // a product before it goes live, or after it's been pulled.
+  // Regular customers (and anonymous visitors) 
   if (req.user?.role !== 'admin') {
     filter.isActive = true;
   }
@@ -172,10 +166,6 @@ exports.createProduct = catchAsync(async (req, res, next) => {
     parsedTags = parseJsonField(tags, 'tags', next);
     if (parsedTags === null) return; // parseJsonField already called next()
   }
-
-  // --- Validate business rules BEFORE touching Cloudinary ---
-  // (cheap checks first, so we never waste an upload on a request
-  // that's going to fail anyway)
 
   if (discountPrice !== undefined && Number(discountPrice) >= Number(price)) {
     return next(new AppError('Price must be greater than discount price.', 400));
