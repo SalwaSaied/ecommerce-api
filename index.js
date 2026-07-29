@@ -79,7 +79,12 @@ app.get('/test-stripe', (req, res) => {
   <div id="payment-result"></div>
 
   <script>
+    const stripe = Stripe("<script>
     const stripe = Stripe("pk_test_51TZep4J5pfNk8Lyf4FEvsiR22z6wptUEjODBGaPsB9fJ0NNoJuYSzMn5pu8wlm3zAaDyBOwPcabEIwcaqWHNVAkA00bkoY0g8E");
+    const elements = stripe.elements();
+    const cardElement = elements.create("card", { style: { base: { fontSize: "16px" } } });
+    cardElement.mount("#card-element");
+");
     const elements = stripe.elements();
     const cardElement = elements.create("card", { style: { base: { fontSize: "16px" } } });
     cardElement.mount("#card-element");
