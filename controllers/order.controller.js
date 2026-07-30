@@ -18,9 +18,16 @@ const FREE_SHIPPING_THRESHOLD = 1000;
 const SHIPPING_FEE = 50;
 const TAX_RATE = 0.14;
 
-// ------------------------------------------------------------------
-// POST /orders   (User)
-// ------------------------------------------------------------------
+const ORDER_STATUS_TRANSITIONS = {
+  pending: ['confirmed', 'cancelled'],
+  confirmed: ['processing', 'cancelled'],
+  processing: ['shipped', 'cancelled'],
+  shipped: ['delivered', 'returned'],
+  delivered: ['returned'],
+  cancelled: [],
+  returned: [],
+};
+
 exports.placeOrder = catchAsync(async (req, res, next) => {
   const { shippingAddress, paymentMethod, customerNote } = req.body;
 
@@ -50,7 +57,7 @@ exports.placeOrder = catchAsync(async (req, res, next) => {
 
   if (method === 'stripe') {
     const paymentIntent = await stripe.paymentIntents.create({
-      amount: Math.round(totalPrice * 100), 
+      amount: Math.round(totalPrice * 100),
       currency: 'egp',
       metadata: { userId: req.user._id.toString() },
     });
@@ -102,7 +109,6 @@ exports.placeOrder = catchAsync(async (req, res, next) => {
     session.endSession();
   }
 
-
   if (method === 'cash') {
     try {
       await sendEmail({
@@ -110,8 +116,7 @@ exports.placeOrder = catchAsync(async (req, res, next) => {
         subject: 'Order Confirmation — SEF Academy Store',
         html: orderConfirmationEmailTemplate(order, req.user.username),
       });
-    } catch (err) {
-    }
+    } catch (err) {}
   }
 
   res.status(201).json({
@@ -122,9 +127,6 @@ exports.placeOrder = catchAsync(async (req, res, next) => {
   });
 });
 
-// ------------------------------------------------------------------
-// POST /orders/webhook/stripe   (Public — called by Stripe, not the frontend)
-// ------------------------------------------------------------------
 exports.stripeWebhook = catchAsync(async (req, res, next) => {
   const signature = req.headers['stripe-signature'];
   let event;
@@ -153,9 +155,7 @@ exports.stripeWebhook = catchAsync(async (req, res, next) => {
             subject: 'Order Confirmation — SEF Academy Store',
             html: orderConfirmationEmailTemplate(order, orderOwner.username),
           });
-        } catch (err) {
-          
-        }
+        } catch (err) {}
       }
     }
   }
@@ -172,9 +172,6 @@ exports.stripeWebhook = catchAsync(async (req, res, next) => {
   res.status(200).json({ received: true });
 });
 
-// ------------------------------------------------------------------
-// GET /orders/my   (User)
-// ------------------------------------------------------------------
 exports.getMyOrders = catchAsync(async (req, res, next) => {
   const page = Number(req.query.page) || 1;
   const limit = Number(req.query.limit) || 10;
@@ -188,48 +185,45 @@ exports.getMyOrders = catchAsync(async (req, res, next) => {
     Order.countDocuments(filter),
   ]);
 
-  res.status(200).json({
-    success: true,
-    total,
-    currentPage: page,
-    totalPages: Math.ceil(total / limit),
-    orders,
-  });
+  res.status(200).json({ success: true, total, currentPage: page, totalPages: Math.ceil(total / limit), orders });
 });
 
-// ------------------------------------------------------------------
-// GET /orders/my/:id   (User)
-// ------------------------------------------------------------------
 exports.getMyOrderById = catchAsync(async (req, res, next) => {
   const order = await Order.findOne({ _id: req.params.id, user: req.user._id });
   if (!order) return next(new AppError(MESSAGES.ORDER_NOT_FOUND, 404));
   res.status(200).json({ success: true, order });
 });
 
-// ------------------------------------------------------------------
-// PATCH /orders/my/:id/cancel   (User)
-// ------------------------------------------------------------------
 exports.cancelMyOrder = catchAsync(async (req, res, next) => {
-  const order = await Order.findOne({ _id: req.params.id, user: req.user._id });
-  if (!order) return next(new AppError(MESSAGES.ORDER_NOT_FOUND, 404));
+  const session = await mongoose.startSession();
+  let order;
 
-  if (!['pending', 'confirmed'].includes(order.status)) {
-    return next(new AppError('Cannot cancel order in current status.', 400));
-  }
+  try {
+    await session.withTransaction(async () => {
+      order = await Order.findOne({ _id: req.params.id, user: req.user._id }).session(session);
+      if (!order) throw new AppError(MESSAGES.ORDER_NOT_FOUND, 404);
 
-  await Promise.all(
-    order.items.map(async (item) => {
-      const product = await Product.findById(item.product);
-      if (product) {
-        product.stock += item.quantity;
-        await product.save();
+      if (!['pending', 'confirmed'].includes(order.status)) {
+        throw new AppError('Cannot cancel order in current status.', 400);
       }
-    })
-  );
 
-  order.status = 'cancelled';
-  order.cancelledAt = new Date();
-  await order.save();
+      for (const item of order.items) {
+        const product = await Product.findById(item.product).session(session);
+        if (product) {
+          product.stock += item.quantity;
+          await product.save({ session });
+        }
+      }
+
+      order.status = 'cancelled';
+      order.cancelledAt = new Date();
+      await order.save({ session });
+    });
+  } catch (err) {
+    return next(err instanceof AppError ? err : new AppError('Failed to cancel order. Please try again.', 500));
+  } finally {
+    session.endSession();
+  }
 
   try {
     await sendEmail({
@@ -237,16 +231,11 @@ exports.cancelMyOrder = catchAsync(async (req, res, next) => {
       subject: 'Order Cancelled — SEF Academy Store',
       html: orderCancelledEmailTemplate(order),
     });
-  } catch (err) {
-    // intentionally ignored
-  }
+  } catch (err) {}
 
   res.status(200).json({ success: true, message: 'Order cancelled successfully.', order });
 });
 
-// ------------------------------------------------------------------
-// GET /orders/admin/dashboard   (Admin)
-// ------------------------------------------------------------------
 exports.getDashboardStats = catchAsync(async (req, res, next) => {
   const now = new Date();
   const startOfThisMonth = new Date(now.getFullYear(), now.getMonth(), 1);
@@ -295,7 +284,7 @@ exports.getDashboardStats = catchAsync(async (req, res, next) => {
       { $limit: 5 },
     ]),
     Order.aggregate([
-      { $match: { createdAt: { $gte: sevenDaysAgo } } },
+      { $match: { paymentStatus: 'paid', createdAt: { $gte: sevenDaysAgo } } },
       {
         $group: {
           _id: { $dateToString: { format: '%Y-%m-%d', date: '$createdAt' } },
@@ -336,12 +325,7 @@ exports.getDashboardStats = catchAsync(async (req, res, next) => {
         delivered: statusCountMap.delivered || 0,
         cancelled: statusCountMap.cancelled || 0,
       },
-      revenue: {
-        total: totalRevenue,
-        thisMonth: thisMonthRevenue,
-        lastMonth: lastMonthRevenue,
-        growthPercent,
-      },
+      revenue: { total: totalRevenue, thisMonth: thisMonthRevenue, lastMonth: lastMonthRevenue, growthPercent },
       recentOrders,
       topProducts: topProductsAgg,
       ordersByStatus: statusCounts,
@@ -351,9 +335,6 @@ exports.getDashboardStats = catchAsync(async (req, res, next) => {
   });
 });
 
-// ------------------------------------------------------------------
-// GET /orders/admin/carts   (Admin)
-// ------------------------------------------------------------------
 exports.getActiveCartsAdmin = catchAsync(async (req, res, next) => {
   const page = Number(req.query.page) || 1;
   const limit = Number(req.query.limit) || 20;
@@ -365,18 +346,9 @@ exports.getActiveCartsAdmin = catchAsync(async (req, res, next) => {
     Cart.countDocuments(filter),
   ]);
 
-  res.status(200).json({
-    success: true,
-    total,
-    currentPage: page,
-    totalPages: Math.ceil(total / limit),
-    carts,
-  });
+  res.status(200).json({ success: true, total, currentPage: page, totalPages: Math.ceil(total / limit), carts });
 });
 
-// ------------------------------------------------------------------
-// GET /orders/admin   (Admin)
-// ------------------------------------------------------------------
 exports.getAllOrdersAdmin = catchAsync(async (req, res, next) => {
   const page = Number(req.query.page) || 1;
   const limit = Number(req.query.limit) || 20;
@@ -404,54 +376,55 @@ exports.getAllOrdersAdmin = catchAsync(async (req, res, next) => {
     Order.countDocuments(filter),
   ]);
 
-  res.status(200).json({
-    success: true,
-    total,
-    currentPage: page,
-    totalPages: Math.ceil(total / limit),
-    orders,
-  });
+  res.status(200).json({ success: true, total, currentPage: page, totalPages: Math.ceil(total / limit), orders });
 });
 
-// ------------------------------------------------------------------
-// GET /orders/admin/:id   (Admin)
-// ------------------------------------------------------------------
 exports.getOrderByIdAdmin = catchAsync(async (req, res, next) => {
   const order = await Order.findById(req.params.id).populate('user', 'username email');
   if (!order) return next(new AppError(MESSAGES.ORDER_NOT_FOUND, 404));
   res.status(200).json({ success: true, order });
 });
 
-// ------------------------------------------------------------------
-// PATCH /orders/admin/:id/status   (Admin)
-// ------------------------------------------------------------------
 exports.updateOrderStatusAdmin = catchAsync(async (req, res, next) => {
   const { status, adminNote } = req.body;
 
-  const order = await Order.findById(req.params.id);
-  if (!order) return next(new AppError(MESSAGES.ORDER_NOT_FOUND, 404));
+  const session = await mongoose.startSession();
+  let order;
 
-  if (status === 'cancelled' && order.status !== 'cancelled') {
-    await Promise.all(
-      order.items.map(async (item) => {
-        const product = await Product.findById(item.product);
-        if (product) {
-          product.stock += item.quantity;
-          await product.save();
+  try {
+    await session.withTransaction(async () => {
+      order = await Order.findById(req.params.id).session(session);
+      if (!order) throw new AppError(MESSAGES.ORDER_NOT_FOUND, 404);
+
+      const allowedNext = ORDER_STATUS_TRANSITIONS[order.status] || [];
+      if (!allowedNext.includes(status)) {
+        throw new AppError(`Cannot change order status from "${order.status}" to "${status}".`, 400);
+      }
+
+      if (status === 'cancelled') {
+        for (const item of order.items) {
+          const product = await Product.findById(item.product).session(session);
+          if (product) {
+            product.stock += item.quantity;
+            await product.save({ session });
+          }
         }
-      })
-    );
-    order.cancelledAt = new Date();
+        order.cancelledAt = new Date();
+      }
+
+      if (status === 'delivered') {
+        order.deliveredAt = new Date();
+      }
+
+      order.status = status;
+      if (adminNote !== undefined) order.adminNote = adminNote;
+      await order.save({ session });
+    });
+  } catch (err) {
+    return next(err instanceof AppError ? err : new AppError('Failed to update order status. Please try again.', 500));
+  } finally {
+    session.endSession();
   }
-
-  if (status === 'delivered' && order.status !== 'delivered') {
-    order.deliveredAt = new Date();
-  }
-
-  order.status = status;
-  if (adminNote !== undefined) order.adminNote = adminNote;
-
-  await order.save();
 
   const orderOwner = await User.findById(order.user);
   if (orderOwner) {
@@ -461,9 +434,7 @@ exports.updateOrderStatusAdmin = catchAsync(async (req, res, next) => {
         subject: 'Order Status Updated — SEF Academy Store',
         html: orderStatusUpdateEmailTemplate(order),
       });
-    } catch (err) {
-      // intentionally ignored
-    }
+    } catch (err) {}
   }
 
   res.status(200).json({ success: true, message: 'Order status updated successfully.', order });
